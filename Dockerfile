@@ -30,17 +30,19 @@ ENV UPLOAD_DIR=/app/uploads
 
 RUN addgroup -S -g 1001 nodejs && adduser -S -u 1001 -G nodejs nextjs
 
-# Next.js standalone (server.js + getracte Runtime-node_modules inkl. pg-Adapter)
+# Next.js standalone (server.js + statische Assets)
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/public ./public
 
-# Prisma-CLI + Schema für `migrate deploy` beim Container-Start
+# Volles node_modules aus dem Build: `prisma migrate deploy` beim Start braucht die Prisma-CLI
+# inkl. ALLER transitiven Deps (@prisma/config → effect …). Das getracte Standalone-Set allein reicht nicht.
+# Überschreibt das (kleinere) Standalone-node_modules mit dem vollständigen Superset — same versions.
+COPY --from=build /app/node_modules ./node_modules
+
+# Prisma-Schema + Config für `migrate deploy`
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/prisma.config.ts ./prisma.config.ts
-COPY --from=build /app/node_modules/prisma ./node_modules/prisma
-COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=build /app/node_modules/dotenv ./node_modules/dotenv
 
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh && mkdir -p /app/uploads && chown -R nextjs:nodejs /app
