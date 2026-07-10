@@ -16,7 +16,8 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npx prisma generate && npm run build
+# public/ sicherstellen (Next erwartet ihn; der Runner kopiert /app/public) — auch falls der Ordner leer/weg ist.
+RUN mkdir -p public && npx prisma generate && npm run build
 
 # ── Runner ──
 FROM node:22-alpine AS runner
