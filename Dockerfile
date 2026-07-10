@@ -6,7 +6,8 @@ FROM node:22-alpine AS deps
 RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# BuildKit-Cache für npm (überlebt Builds → schnelle Retries), kein Audit/Fund-Netzwerkcall.
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 
 # ── Build ──
 FROM node:22-alpine AS build
