@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.gitignore
+uploads
+docs
+scripts
+.claude
+.env
+.env.*
+!.env.example
+*.log
+README.md
+CLAUDE.md
+AGENTS.md

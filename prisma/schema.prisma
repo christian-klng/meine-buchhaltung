@@ -1,0 +1,230 @@
+// Beleg-Prüf-App — Datenmodell (siehe docs/Beleg-App-Plan.md, Abschnitt 5)
+// Grundprinzipien: alle Geldbeträge als Integer-Cent; Original-Belege werden nie verändert (GoBD);
+// § 13b Reverse-Charge als eigener Fall; Fremdwährung mit Wartestatus `awaiting_fx`.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────── Enums ───────────────────────────
+
+enum VoucherStatus {
+  draft // frisch hochgeladen, noch nicht extrahiert
+  unchecked // extrahiert, wartet auf menschliche Prüfung
+  awaiting_fx // Fremdwährungsbeleg: echter EUR-Betrag wartet auf Bankabbuchung
+  checked // vom Menschen bestätigt
+}
+
+enum VoucherType {
+  purchaseinvoice // Eingangsrechnung (Standard)
+  purchasecreditnote // Eingangs-Gutschrift / Refund (mindert Ausgaben)
+  salesinvoice // Ausgangsrechnung (out of scope MVP, Modell offen)
+  salescreditnote
+}
+
+enum TaxType {
+  vatfree // § 19 Kleinunternehmer, inländisch
+  reverse_charge // § 13b: Leistungsempfänger schuldet die USt
+}
+
+// § 13b-Relevanz je Lieferant/Beleg. Nur `ja` fließt in die Auswertung.
+enum ReverseChargeFlag {
+  ja // vom Steuerberater bestätigter Reverse-Charge-Fall
+  nein // inländisch / nicht relevant
+  pruefen // neuer Auslandslieferant, noch nicht bestätigt (zählt NICHT)
+}
+
+enum SplitType {
+  none // kein Split — voller Betrag auf eine Kategorie
+  split_70_30 // 70 % Betrieb / 30 % Privatentnahme (kanonische Formel)
+}
+
+enum ReconciliationStatus {
+  matched // bestätigte Zuordnung
+  suggested // Vorschlag, noch nicht bestätigt
+  manual // manuell gesetzt
+}
+
+// ─────────────────────────── Stammdaten ───────────────────────────
+
+model Category {
+  id                String   @id @default(cuid())
+  name              String   @unique
+  lexwareCategoryId String?  @unique // GUID aus Lexware, für spätere Migration/Sync
+  kind              String   @default("outgo") // outgo | income
+  createdAt         DateTime @default(now())
+
+  voucherItems   VoucherItem[]
+  vendorDefaults VendorRule[]  @relation("VendorDefaultCategory")
+  vendorBusiness VendorRule[]  @relation("VendorBusinessCategory")
+  vendorPrivat   VendorRule[]  @relation("VendorPrivatCategory")
+}
+
+model Contact {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  address      String?
+  countryCode  String? // Sitz des Leistenden (DE/EU-Land/US...), für § 13b
+  role         String   @default("vendor")
+  lexwareId    String?  @unique
+  // Erkennungsmuster für die programmatische Zuordnung im Belegtext
+  matchDomains String[] @default([])
+  matchIban    String[] @default([])
+  matchStrings String[] @default([])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  vouchers   Voucher[]
+  vendorRule VendorRule?
+}
+
+// Die von Christian gepflegte Lieferanten-Matrix (Plan Abschnitt 7).
+model VendorRule {
+  id                   String            @id @default(cuid())
+  contactId            String            @unique
+  contact              Contact           @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  // Buchungslogik
+  defaultCategoryId    String?
+  defaultCategory      Category?         @relation("VendorDefaultCategory", fields: [defaultCategoryId], references: [id])
+  splitType            SplitType         @default(none)
+  businessPercent      Int? // z. B. 70 (nur bei Split)
+  businessCategoryId   String?
+  businessCategory     Category?         @relation("VendorBusinessCategory", fields: [businessCategoryId], references: [id])
+  privatCategoryId     String?
+  privatCategory       Category?         @relation("VendorPrivatCategory", fields: [privatCategoryId], references: [id])
+  currency             String            @default("EUR") // steuert den Fremdwährungs-Hard-Stop
+  reverseCharge        ReverseChargeFlag @default(nein)
+  reverseChargeVatRate Int               @default(19) // USt-Satz in Prozent für die § 13b-Rechnung
+  locked               Boolean           @default(false) // kuratierte Seed-Regel — nicht per Auto-Lernen überschreibbar
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+}
+
+// ─────────────────────────── Belege ───────────────────────────
+
+model Voucher {
+  id                  String        @id @default(cuid())
+  date                DateTime
+  contactId           String?
+  contact             Contact?      @relation(fields: [contactId], references: [id])
+  voucherNumber       String?
+  currency            String        @default("EUR")
+  originalAmountCents Int? // Betrag in Fremdwährung (z. B. USD-Cent), zur Nachvollziehbarkeit
+  amountCents         Int           @default(0) // Brutto in EUR-Cent (führender Betrag)
+  status              VoucherStatus @default(draft)
+  type                VoucherType   @default(purchaseinvoice)
+  taxType             TaxType       @default(vatfree)
+  remark              String?
+  paidPrivately       Boolean       @default(false) // privat bezahlt → kein Bank-Match nötig
+  // § 13b Reverse-Charge
+  reverseCharge             ReverseChargeFlag @default(nein)
+  reverseChargeBaseEurCents Int? // Bemessungsgrundlage = tatsächlich abgebuchter EUR-Betrag
+  reverseChargeVatRate      Int? // USt-Satz in Prozent
+  reverseChargeVatCents     Int? // berechnete geschuldete USt = base * rate
+  createdAt                 DateTime      @default(now())
+  updatedAt                 DateTime      @updatedAt
+
+  items      VoucherItem[]
+  files      VoucherFile[]
+  reconLinks ReconciliationLink[]
+  auditLogs  AuditLog[]
+
+  @@index([status])
+  @@index([contactId])
+}
+
+model VoucherItem {
+  id             String   @id @default(cuid())
+  voucherId      String
+  voucher        Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  categoryId     String
+  category       Category @relation(fields: [categoryId], references: [id])
+  amountCents    Int
+  taxRatePercent Int      @default(0)
+  taxAmountCents Int      @default(0)
+  note           String? // z. B. "Betrieb" / "Privatentnahme"
+}
+
+// Original-Datei. Wird NIE verändert (GoBD). sha256 als Integritätsanker + Duplikat-Erkennung.
+model VoucherFile {
+  id            String   @id @default(cuid())
+  voucherId     String
+  voucher       Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  storagePath   String // serverseitig generierter Pfad (nie Client-Dateiname)
+  originalName  String?
+  mimeType      String?
+  sha256        String
+  sizeBytes     Int?
+  extractedText String? // Textlayer, falls vorhanden
+  createdAt     DateTime @default(now())
+
+  @@index([sha256])
+}
+
+// ─────────────────────────── Bank ───────────────────────────
+
+model BankStatement {
+  id          String    @id @default(cuid())
+  format      String // camt052 | camt053 | csv | mt940
+  account     String?
+  periodStart DateTime?
+  periodEnd   DateTime?
+  fileName    String?
+  rawHash     String?
+  importedAt  DateTime  @default(now())
+
+  transactions BankTransaction[]
+}
+
+model BankTransaction {
+  id           String        @id @default(cuid())
+  statementId  String
+  statement    BankStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  date         DateTime
+  amountCents  Int // vorzeichenbehaftet: negativ = Abbuchung
+  currency     String        @default("EUR")
+  counterparty String?
+  purpose      String?
+  rawRef       String?
+  createdAt    DateTime      @default(now())
+
+  reconLinks ReconciliationLink[]
+
+  @@index([date])
+  @@index([amountCents])
+}
+
+model ReconciliationLink {
+  id                String               @id @default(cuid())
+  voucherId         String
+  voucher           Voucher              @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  bankTransactionId String
+  bankTransaction   BankTransaction      @relation(fields: [bankTransactionId], references: [id], onDelete: Cascade)
+  status            ReconciliationStatus @default(suggested)
+  confidence        Int? // 0..100
+  createdAt         DateTime             @default(now())
+
+  @@unique([voucherId, bankTransactionId])
+}
+
+// ─────────────────────────── Revisionssicherheit ───────────────────────────
+// Append-only gedacht: die App-Rolle erhält später nur INSERT (siehe Review D6).
+model AuditLog {
+  id        String   @id @default(cuid())
+  voucherId String?
+  voucher   Voucher? @relation(fields: [voucherId], references: [id], onDelete: SetNull)
+  action    String // create | update | status_change | fx_correction | confirm | duplicate_mark
+  actor     String   @default("system")
+  field     String?
+  oldValue  String?
+  newValue  String?
+  createdAt DateTime @default(now())
+
+  @@index([voucherId])
+  @@index([createdAt])
+}

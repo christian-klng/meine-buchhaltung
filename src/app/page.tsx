@@ -1,65 +1,58 @@
-import Image from "next/image";
+import { prisma } from "@/lib/db";
+import { StatCard, PageHeader, EmptyState } from "@/components/ui";
+import { aggregateReverseChargeByQuarter, type RcVoucher } from "@/lib/reverse-charge";
+import { formatEur } from "@/lib/format";
+import Link from "next/link";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+export default async function DashboardPage() {
+  const [unchecked, awaitingFx, checked, ruleCount, categoryCount, rcVendorCount, rcVouchers] = await Promise.all([
+    prisma.voucher.count({ where: { status: "unchecked" } }),
+    prisma.voucher.count({ where: { status: "awaiting_fx" } }),
+    prisma.voucher.count({ where: { status: "checked" } }),
+    prisma.vendorRule.count(),
+    prisma.category.count(),
+    prisma.vendorRule.count({ where: { reverseCharge: "ja" } }),
+    prisma.voucher.findMany({
+      where: { reverseCharge: "ja", reverseChargeBaseEurCents: { not: null } },
+      select: { reverseCharge: true, reverseChargeBaseEurCents: true, reverseChargeVatRate: true, date: true },
+    }),
+  ]);
+
+  const rcByQuarter = aggregateReverseChargeByQuarter(rcVouchers as unknown as RcVoucher[]);
+  const rcTotalVat = Object.values(rcByQuarter).reduce((s, q) => s + q.vatCents, 0);
+  const totalVouchers = unchecked + awaitingFx + checked;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div>
+      <PageHeader title="Dashboard" subtitle="Überblick über offene Belege, Fremdwährung und § 13b." />
+
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <StatCard label="Zu prüfen" value={unchecked} tone={unchecked > 0 ? "amber" : "neutral"} hint="Status: unchecked" />
+        <StatCard label="Wartet auf EUR" value={awaitingFx} tone={awaitingFx > 0 ? "blue" : "neutral"} hint="Fremdwährung (awaiting_fx)" />
+        <StatCard label="Geprüft" value={checked} tone="green" hint="Status: checked" />
+        <StatCard label="Lieferanten-Regeln" value={ruleCount} hint={`davon § 13b: ${rcVendorCount}`} />
+        <StatCard label="Kategorien" value={categoryCount} hint="Seed aus Lexware-IDs" />
+        <StatCard label="§ 13b USt (offen)" value={formatEur(rcTotalVat)} tone={rcTotalVat > 0 ? "red" : "neutral"} hint="Σ geschuldete USt" />
+      </div>
+
+      <div className="mt-8">
+        {totalVouchers === 0 ? (
+          <EmptyState title="Noch keine Belege erfasst.">
+            Die Stammdaten stehen: <strong>{ruleCount} Lieferanten-Regeln</strong> und <strong>{categoryCount} Kategorien</strong> sind
+            {" "}geladen. Als Nächstes folgen Upload &amp; Extraktion. Die{" "}
+            <Link href="/lieferanten" className="text-blue-600 underline">
+              Lieferanten-Matrix
+            </Link>{" "}
+            kannst du schon jetzt ansehen.
+          </EmptyState>
+        ) : (
+          <Link href="/belege" className="text-sm text-blue-600 underline">
+            {totalVouchers} Belege ansehen →
+          </Link>
+        )}
+      </div>
     </div>
   );
 }
