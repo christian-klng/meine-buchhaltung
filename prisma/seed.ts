@@ -71,6 +71,14 @@ const VENDORS: VendorSeed[] = [
 ];
 
 async function main() {
+  // Idempotenz-Schutz: nur seeden, wenn die DB noch leer ist (überschreibt keine späteren UI-Anpassungen).
+  // Mit FORCE_SEED=1 lässt sich der Seed erzwingen (aktualisiert die gelockten Seed-Regeln).
+  const existing = await prisma.category.count();
+  if (existing > 0 && !process.env.FORCE_SEED) {
+    console.log(`Seed übersprungen — bereits ${existing} Kategorien vorhanden (FORCE_SEED=1 zum Erzwingen).`);
+    return;
+  }
+
   // Kategorien
   const categoryIdByName = new Map<string, string>();
   for (const c of CATEGORIES) {

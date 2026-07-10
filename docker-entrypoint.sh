@@ -35,5 +35,10 @@ until su-exec nextjs:nodejs node ./node_modules/prisma/build/index.js migrate de
   sleep 5
 done
 
+# ── Stammdaten seeden (idempotent: überspringt sich selbst, wenn die DB bereits befüllt ist) ──
+# Non-fatal: ein Seed-Fehler soll den App-Start nicht verhindern (leere DB ist nachladbar).
+echo "→ Seed (Kategorien + Lieferanten-Matrix, nur bei leerer DB)"
+su-exec nextjs:nodejs node ./node_modules/tsx/dist/cli.mjs prisma/seed.ts || echo "WARN: Seed fehlgeschlagen — App startet trotzdem."
+
 echo "→ Starting Next.js on ${HOSTNAME}:${PORT}"
 exec su-exec nextjs:nodejs node server.js

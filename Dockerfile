@@ -44,6 +44,10 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/prisma.config.ts ./prisma.config.ts
 
+# src (inkl. generiertem Prisma-Client) + tsconfig, damit `tsx prisma/seed.ts` im Container läuft (Auto-Seed)
+COPY --from=build /app/src ./src
+COPY --from=build /app/tsconfig.json ./tsconfig.json
+
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh && mkdir -p /app/uploads && chown -R nextjs:nodejs /app
 

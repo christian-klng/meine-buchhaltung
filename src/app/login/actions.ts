@@ -35,11 +35,14 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   rateLimitSuccess(GLOBAL_KEY);
 
   const token = await createSession(process.env.AUTH_SECRET ?? "", now);
+  // `Secure` NUR wenn die Verbindung tatsächlich HTTPS ist — sonst sendet der Browser das Cookie
+  // über HTTP nie zurück (→ Dauer-Login). Schaltet automatisch auf Secure, sobald Coolify TLS macht.
+  const isHttps = (h.get("x-forwarded-proto") ?? "").split(",")[0].trim() === "https";
   const store = await cookies();
   store.set(SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    secure: isHttps,
+    sameSite: "lax",
     path: "/",
     maxAge: SESSION_MAX_AGE,
   });

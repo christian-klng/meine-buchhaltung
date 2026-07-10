@@ -43,5 +43,11 @@ Die Original-Belege liegen unter **`/app/uploads`**. Ohne persistentes Volume si
 
 1. Postgres-Ressource in Coolify anlegen, `DATABASE_URL` in die App übernehmen.
 2. `AUTH_SECRET` + `AUTH_PASSWORD` als Secrets setzen.
-3. Persistent Storage `/app/uploads` anlegen.
-4. Deploy. Der Entrypoint migriert automatisch; danach unter `/login` anmelden.
+3. Persistent Storage `/app/uploads` anlegen. **Der Name darf keine Leerzeichen/Umlaute enthalten** (Docker-Volume-Name), z. B. `uploads`.
+4. Deploy. Der Entrypoint erledigt automatisch:
+   - `prisma migrate deploy` (legt die 10 Tabellen an),
+   - **Seed** (Kategorien + Lieferanten-Matrix) — **nur bei leerer DB** (idempotent, überschreibt keine späteren UI-Anpassungen). Beim ersten Deploy sind danach 10 Kategorien + 27 Lieferanten-Regeln da.
+5. Unter `/login` anmelden.
+
+**Seed erzwingen** (z. B. um die gelockten Seed-Regeln nach einer Änderung neu zu laden): im App-Container ausführen
+`FORCE_SEED=1 node ./node_modules/tsx/dist/cli.mjs prisma/seed.ts` (Coolify → App → Terminal).
