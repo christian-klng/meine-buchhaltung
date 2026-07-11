@@ -12,6 +12,8 @@ const SPLIT_TYPES = ["none", "split_70_30"] as const;
 export interface VendorRulePayload {
   name: string;
   countryZone: CountryZone | null;
+  matchStrings: string[];
+  matchDomains: string[];
   defaultCategoryId: string | null;
   splitType: "none" | "split_70_30";
   businessPercent: number | null;
@@ -20,6 +22,16 @@ export interface VendorRulePayload {
   currency: string;
   reverseCharge: "ja" | "nein" | "pruefen";
   reverseChargeVatRate: number;
+}
+
+/** Erkennungsmuster säubern: trimmen, klein schreiben, Leere/Duplikate entfernen (matcht das Seed-Verhalten & den Match-Vergleich). */
+function normalizePatterns(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+  const cleaned = values
+    .filter((v): v is string => typeof v === "string")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  return Array.from(new Set(cleaned));
 }
 
 /**
@@ -54,7 +66,7 @@ export async function saveVendorRule(id: string, p: VendorRulePayload): Promise<
     await prisma.$transaction([
       prisma.contact.update({
         where: { id: rule.contactId },
-        data: { name, countryZone: p.countryZone },
+        data: { name, countryZone: p.countryZone, matchStrings: normalizePatterns(p.matchStrings), matchDomains: normalizePatterns(p.matchDomains) },
       }),
       prisma.vendorRule.update({
         where: { id },

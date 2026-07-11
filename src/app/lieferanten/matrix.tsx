@@ -17,6 +17,8 @@ export interface RuleRow {
   currency: string;
   reverseCharge: "ja" | "nein" | "pruefen";
   reverseChargeVatRate: number;
+  matchStrings: string[];
+  matchDomains: string[];
   locked: boolean;
 }
 
@@ -68,7 +70,17 @@ export function LieferantenMatrix({ rows, categories }: { rows: RuleRow[]; categ
                   : null;
               return (
                 <tr key={r.id} className="hover:bg-neutral-50">
-                  <td className="px-4 py-2.5 font-medium text-neutral-900">{r.contactName}</td>
+                  <td className="px-4 py-2.5 font-medium text-neutral-900">
+                    {r.contactName}
+                    {r.matchStrings.length === 0 && r.matchDomains.length === 0 && (
+                      <span
+                        title="Keine Erkennungsmuster hinterlegt — Belege dieses Lieferanten werden beim Upload nicht automatisch zugeordnet."
+                        className="ml-2 inline-block whitespace-nowrap rounded bg-amber-50 px-1.5 py-0.5 text-xs font-normal text-amber-700 ring-1 ring-amber-200"
+                      >
+                        ⚠ keine Erkennung
+                      </span>
+                    )}
+                  </td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-neutral-500">{r.countryZone ? zoneShort[r.countryZone] : "–"}</td>
                   <td className="px-3 py-2.5 text-neutral-700">
                     {catName(r.defaultCategoryId) ?? <span className="text-neutral-400 italic">von dir</span>}
@@ -116,6 +128,9 @@ function Field({ label, wide, children }: { label: string; wide?: boolean; child
   );
 }
 
+/** Kommagetrennte Eingabe → Array (nur trimmen/Leere raus; endgültige Normalisierung passiert serverseitig). */
+const splitPatterns = (v: string): string[] => v.split(",").map((s) => s.trim()).filter(Boolean);
+
 function EditModal({ rule, categories, onClose }: { rule: RuleRow; categories: CategoryOption[]; onClose: () => void }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -131,6 +146,8 @@ function EditModal({ rule, categories, onClose }: { rule: RuleRow; categories: C
   const [currency, setCurrency] = useState(rule.currency);
   const [reverseCharge, setReverseCharge] = useState<RuleRow["reverseCharge"]>(rule.reverseCharge);
   const [rcRate, setRcRate] = useState(rule.reverseChargeVatRate);
+  const [matchStrings, setMatchStrings] = useState(rule.matchStrings.join(", "));
+  const [matchDomains, setMatchDomains] = useState(rule.matchDomains.join(", "));
 
   const isSplit = splitType === "split_70_30";
   const currencyOptions = Array.from(new Set(["EUR", "USD", "GBP", "CHF", rule.currency]));
@@ -156,6 +173,8 @@ function EditModal({ rule, categories, onClose }: { rule: RuleRow; categories: C
       currency,
       reverseCharge,
       reverseChargeVatRate: rcRate,
+      matchStrings: splitPatterns(matchStrings),
+      matchDomains: splitPatterns(matchDomains),
     };
     startTransition(async () => {
       const res = await saveVendorRule(rule.id, payload);
@@ -225,6 +244,30 @@ function EditModal({ rule, categories, onClose }: { rule: RuleRow; categories: C
                 ))}
               </select>
             </Field>
+          </div>
+
+          {/* Automatische Erkennung beim Upload */}
+          <div className="space-y-3 rounded-lg border border-neutral-200 p-4">
+            <Field label="Erkennungs-Begriffe">
+              <input
+                value={matchStrings}
+                onChange={(e) => setMatchStrings(e.target.value)}
+                placeholder="z. B. telekom, deutsche telekom"
+                className="input"
+              />
+            </Field>
+            <Field label="Erkennungs-Domains">
+              <input
+                value={matchDomains}
+                onChange={(e) => setMatchDomains(e.target.value)}
+                placeholder="z. B. telekom.de"
+                className="input"
+              />
+            </Field>
+            <p className="text-xs text-neutral-500">
+              Kommagetrennt. Taucht einer dieser Begriffe oder eine Domain im Beleg-Text auf, wird der Lieferant beim Upload automatisch
+              zugeordnet (längster Treffer gewinnt). Ohne Eintrag bleibt der Beleg beim Upload ohne Lieferant.
+            </p>
           </div>
 
           {/* Aufteilung / Split */}

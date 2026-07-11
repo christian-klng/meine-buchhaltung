@@ -54,17 +54,22 @@ export async function ingestVoucher(buf: Buffer, originalName: string, mime: str
       }
     : null;
 
-  const proposal = buildProposal(rule, {
-    amountCents: fields.amountCents,
-    currency: fields.currency,
-    date: fields.date,
-    voucherNumber: fields.voucherNumber,
-  });
+  const proposal = buildProposal(
+    rule,
+    {
+      amountCents: fields.amountCents,
+      currency: fields.currency,
+      date: fields.date,
+      voucherNumber: fields.voucherNumber,
+    },
+    matchedContact?.id ?? null,
+  );
 
   const remarks: string[] = [];
   if (!fields.hasText) remarks.push("Kein Textlayer erkannt — bitte manuell erfassen");
   if (!proposal.date) remarks.push("Datum nicht erkannt");
   if (proposal.amountCents === 0) remarks.push("Betrag nicht erkannt");
+  if (matchedContact && !vr) remarks.push("Lieferant erkannt, aber ohne Buchungsregel — Kategorie/§ 13b bitte manuell erfassen");
   if (proposal.remark) remarks.push(proposal.remark);
 
   const created = await prisma.voucher.create({

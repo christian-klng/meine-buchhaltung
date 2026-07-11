@@ -25,6 +25,8 @@ export default async function LieferantenPage() {
     currency: r.currency,
     reverseCharge: r.reverseCharge,
     reverseChargeVatRate: r.reverseChargeVatRate,
+    matchStrings: r.contact.matchStrings,
+    matchDomains: r.contact.matchDomains,
     locked: r.locked,
   }));
 

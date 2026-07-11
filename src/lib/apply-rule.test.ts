@@ -78,4 +78,19 @@ describe("buildProposal", () => {
     expect(p.items).toEqual([]);
     expect(p.reverseCharge).toBe("nein");
   });
+
+  it("Kontakt erkannt, aber ohne Regel: contactId gesetzt, keine Positionen/§ 13b", () => {
+    const p = buildProposal(null, ex(5000), "acme");
+    expect(p.contactId).toBe("acme");
+    expect(p.status).toBe("unchecked");
+    expect(p.items).toEqual([]);
+    expect(p.reverseCharge).toBe("nein");
+    expect(p.reverseChargeBaseEurCents).toBeNull();
+  });
+
+  it("Rule vorhanden: erkannte contactId hat Vorrang, bleibt aber konsistent", () => {
+    const p = buildProposal(cortecsRule, ex(6250), "cortecs");
+    expect(p.contactId).toBe("cortecs");
+    expect(p.items).toEqual([{ categoryId: "saas", amountCents: 6250 }]);
+  });
 });

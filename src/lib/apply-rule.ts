@@ -44,7 +44,9 @@ export interface VoucherProposal {
   remark: string | null;
 }
 
-export function buildProposal(rule: RuleInput | null, ex: ExtractInput): VoucherProposal {
+// `contactId` ist der erkannte Lieferant — bewusst getrennt von der Rule übergeben, damit ein
+// gematchter Kontakt auch dann am Beleg hängt, wenn (noch) keine VendorRule hinterlegt ist.
+export function buildProposal(rule: RuleInput | null, ex: ExtractInput, contactId?: string | null): VoucherProposal {
   const currency = (rule?.currency ?? ex.currency ?? "EUR").toUpperCase();
   const isFx = currency !== "EUR";
   const amountCents = ex.amountCents ?? 0;
@@ -72,7 +74,7 @@ export function buildProposal(rule: RuleInput | null, ex: ExtractInput): Voucher
   const rcVat = rcBase != null ? reverseChargeVatCents(rcBase, rate) : null;
 
   return {
-    contactId: rule?.contactId ?? null,
+    contactId: contactId ?? rule?.contactId ?? null,
     currency,
     amountCents,
     status,
