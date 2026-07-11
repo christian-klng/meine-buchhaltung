@@ -1,76 +1,44 @@
 import { prisma } from "@/lib/db";
-import { PageHeader, Badge } from "@/components/ui";
+import { PageHeader } from "@/components/ui";
+import { LieferantenMatrix, type RuleRow } from "./matrix";
 
 export const dynamic = "force-dynamic";
 
-function RcBadge({ flag }: { flag: "ja" | "nein" | "pruefen" }) {
-  if (flag === "ja") return <Badge tone="red">Ja</Badge>;
-  if (flag === "pruefen") return <Badge tone="amber">Prüfen</Badge>;
-  return <Badge tone="neutral">Nein</Badge>;
-}
-
 export default async function LieferantenPage() {
-  const rules = await prisma.vendorRule.findMany({
-    include: { contact: true, defaultCategory: true, businessCategory: true, privatCategory: true },
-    orderBy: [{ reverseCharge: "asc" }, { contact: { name: "asc" } }],
-  });
+  const [rules, categories] = await Promise.all([
+    prisma.vendorRule.findMany({
+      include: { contact: true },
+      orderBy: [{ reverseCharge: "asc" }, { contact: { name: "asc" } }],
+    }),
+    prisma.category.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+  ]);
+
+  const rows: RuleRow[] = rules.map((r) => ({
+    id: r.id,
+    contactName: r.contact.name,
+    countryZone: r.contact.countryZone,
+    defaultCategoryId: r.defaultCategoryId,
+    splitType: r.splitType,
+    businessPercent: r.businessPercent,
+    businessCategoryId: r.businessCategoryId,
+    privatCategoryId: r.privatCategoryId,
+    currency: r.currency,
+    reverseCharge: r.reverseCharge,
+    reverseChargeVatRate: r.reverseChargeVatRate,
+    locked: r.locked,
+  }));
 
   return (
     <div>
       <PageHeader
-        title="Lieferanten-Matrix"
-        subtitle={`${rules.length} Regeln. Kategorie, Split-Logik, Währung und § 13b je Lieferant — vorbelegt, von dir editierbar.`}
+        title="Lieferanten"
+        subtitle={`${rows.length} Regeln. Kategorie, Split-Logik, Währung und § 13b je Lieferant — vorbelegt, über das Stift-Icon editierbar.`}
       />
 
-      <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-500">
-              <th className="px-4 py-3 font-medium">Lieferant</th>
-              <th className="px-3 py-3 font-medium">Land</th>
-              <th className="px-3 py-3 font-medium">Kategorie</th>
-              <th className="px-3 py-3 font-medium">Split</th>
-              <th className="px-3 py-3 font-medium">Währung</th>
-              <th className="px-3 py-3 font-medium">§ 13b</th>
-              <th className="px-3 py-3 font-medium">Satz</th>
-              <th className="px-3 py-3 font-medium"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-neutral-100">
-            {rules.map((r) => {
-              const split =
-                r.splitType === "split_70_30" && r.businessCategory && r.privatCategory
-                  ? `${r.businessPercent ?? 70}% ${r.businessCategory.name} / ${100 - (r.businessPercent ?? 70)}% ${r.privatCategory.name}`
-                  : null;
-              return (
-                <tr key={r.id} className="hover:bg-neutral-50">
-                  <td className="px-4 py-2.5 font-medium text-neutral-900">{r.contact.name}</td>
-                  <td className="px-3 py-2.5 text-neutral-500">{r.contact.countryCode ?? "–"}</td>
-                  <td className="px-3 py-2.5 text-neutral-700">
-                    {r.defaultCategory?.name ?? <span className="text-neutral-400 italic">von dir</span>}
-                  </td>
-                  <td className="px-3 py-2.5 text-neutral-700">{split ?? <span className="text-neutral-400">–</span>}</td>
-                  <td className="px-3 py-2.5">
-                    {r.currency === "EUR" ? (
-                      <span className="text-neutral-600">EUR</span>
-                    ) : (
-                      <Badge tone="blue">{r.currency}</Badge>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <RcBadge flag={r.reverseCharge} />
-                  </td>
-                  <td className="px-3 py-2.5 tabular-nums text-neutral-600">{r.reverseCharge === "ja" ? `${r.reverseChargeVatRate} %` : "–"}</td>
-                  <td className="px-3 py-2.5">{r.locked && <Badge tone="neutral">🔒 Seed</Badge>}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <LieferantenMatrix rows={rows} categories={categories} />
 
       <p className="mt-4 text-xs text-neutral-400">
-        Währung und § 13b sind unabhängig: EUR-Abrechnung schließt Reverse-Charge nicht aus. „Prüfen" zählt bewusst nicht in die
+        Währung und § 13b sind unabhängig: EUR-Abrechnung schließt Reverse-Charge nicht aus. „Prüfen“ zählt bewusst nicht in die
         Auswertung, bis der Steuerberater bestätigt.
       </p>
     </div>

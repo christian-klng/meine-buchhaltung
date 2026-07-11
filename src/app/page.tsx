@@ -43,7 +43,7 @@ export default async function DashboardPage() {
             Die Stammdaten stehen: <strong>{ruleCount} Lieferanten-Regeln</strong> und <strong>{categoryCount} Kategorien</strong> sind
             {" "}geladen. Als Nächstes folgen Upload &amp; Extraktion. Die{" "}
             <Link href="/lieferanten" className="text-blue-600 underline">
-              Lieferanten-Matrix
+              Lieferanten-Übersicht
             </Link>{" "}
             kannst du schon jetzt ansehen.
           </EmptyState>

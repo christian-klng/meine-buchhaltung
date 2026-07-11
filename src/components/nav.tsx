@@ -7,7 +7,7 @@ const items = [
   { href: "/belege", label: "Belege" },
   { href: "/bank", label: "Bank" },
   { href: "/abgleich", label: "Abgleich" },
-  { href: "/lieferanten", label: "Lieferanten-Matrix" },
+  { href: "/lieferanten", label: "Lieferanten" },
   { href: "/reverse-charge", label: "§ 13b" },
 ];
 

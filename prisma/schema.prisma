@@ -39,6 +39,13 @@ enum ReverseChargeFlag {
   pruefen // neuer Auslandslieferant, noch nicht bestätigt (zählt NICHT)
 }
 
+// Steuerliche Zone des Leistenden — die für § 13b relevante Unterscheidung.
+enum CountryZone {
+  DE // Inland
+  EU // übriges EU-Gemeinschaftsgebiet (§ 13b Abs. 1)
+  NON_EU // Drittland (§ 13b Abs. 2 Nr. 1)
+}
+
 enum SplitType {
   none // kein Split — voller Betrag auf eine Kategorie
   split_70_30 // 70 % Betrieb / 30 % Privatentnahme (kanonische Formel)
@@ -69,7 +76,7 @@ model Contact {
   id           String   @id @default(cuid())
   name         String   @unique
   address      String?
-  countryCode  String? // Sitz des Leistenden (DE/EU-Land/US...), für § 13b
+  countryZone  CountryZone? // Steuerliche Zone des Leistenden (Inland/EU/Drittland), für § 13b
   role         String   @default("vendor")
   lexwareId    String?  @unique
   // Erkennungsmuster für die programmatische Zuordnung im Belegtext

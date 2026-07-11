@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { PageHeader, Badge, EmptyState, StatCard } from "@/components/ui";
 import { aggregateReverseChargeByQuarter, type RcVoucher } from "@/lib/reverse-charge";
 import { formatEur } from "@/lib/format";
+import { zoneShort } from "@/lib/country-zone";
 
 export const dynamic = "force-dynamic";
 
@@ -74,7 +75,7 @@ export default async function ReverseChargePage() {
         {rcVendors.map((v) => (
           <span key={v.id} className="inline-flex items-center gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm">
             {v.contact.name}
-            <Badge tone="neutral">{v.contact.countryCode ?? "?"}</Badge>
+            <Badge tone="neutral">{v.contact.countryZone ? zoneShort[v.contact.countryZone] : "?"}</Badge>
             {v.currency !== "EUR" && <Badge tone="blue">{v.currency}</Badge>}
           </span>
         ))}
